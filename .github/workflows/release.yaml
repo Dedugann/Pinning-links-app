@@ -1,0 +1,27 @@
+name: Build Windows Release
+on:
+  push:
+    branches: [ main, master ] # Сборка запустится автоматически при пуше в эти ветки
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows EXE
+        run: flutter build windows --release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: link-manager-windows
+          path: build/windows/x64/runner/Release/
