@@ -8,7 +8,6 @@ void main() async {
   await windowManager.ensureInitialized();
   
   await Hive.initFlutter();
-  // Открываем коробку
   await Hive.openBox('links_box');
 
   WindowOptions windowOptions = const WindowOptions(
@@ -54,6 +53,47 @@ class _MainScreenState extends State<MainScreen> {
 
   String _searchQuery = '';
 
+  // Хелпер для получения домена из ссылки
+  String _getDomain(String url) {
+    try {
+      var uri = Uri.parse(url);
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        uri = Uri.parse('https://$url');
+      }
+      return uri.host;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  // Виджет для загрузки иконки сайта (Favicon)
+  Widget _buildFavicon(String url, bool isPinned) {
+    final domain = _getDomain(url);
+    if (domain.isEmpty) {
+      return Icon(Icons.link, color: isPinned ? Colors.blueAccent : Colors.grey);
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: Image.network(
+        'https://www.google.com/s2/favicons?sz=64&domain=$domain',
+        width: 24,
+        height: 24,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          return Icon(Icons.link, color: isPinned ? Colors.blueAccent : Colors.grey);
+        },
+      ),
+    );
+  }
+
   void _launchURL(String urlString) async {
     if (!urlString.startsWith('http://') && !urlString.startsWith('https://')) {
       urlString = 'https://$urlString';
@@ -66,7 +106,10 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
+  // Окно добавления новой ссылки
   void _showAddDialog() {
+    _titleController.clear();
+    _urlController.clear();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -76,38 +119,74 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             TextField(
               controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Название',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Название', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
-            // Возвращаем поле для ввода ссылки, которое я потерял
             TextField(
               controller: _urlController,
-              decoration: const InputDecoration(
-                labelText: 'Ссылка (URL)',
-                border: OutlineInputBorder(),
-              ),
+              decoration: const InputDecoration(labelText: 'Ссылка (URL)', border: OutlineInputBorder()),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
           ElevatedButton(
             onPressed: () {
               if (_titleController.text.isNotEmpty && _urlController.text.isNotEmpty) {
-                // Сохраняем структуру Map
                 _linksBox.put(_titleController.text, {
                   'url': _urlController.text,
                   'isPinned': false,
                 });
+                Navigator.pop(context);
+                setState(() {}); 
+              }
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Окно РЕДАКТИРОВАНИЯ существующей ссылки
+  void _showEditDialog(String oldTitle, Map linkData) {
+    final TextEditingController editTitleController = TextEditingController(text: oldTitle);
+    final TextEditingController editUrlController = TextEditingController(text: linkData['url']);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Редактировать ссылку'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: editTitleController,
+              decoration: const InputDecoration(labelText: 'Название', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: editUrlController,
+              decoration: const InputDecoration(labelText: 'Ссылка (URL)', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              if (editTitleController.text.isNotEmpty && editUrlController.text.isNotEmpty) {
+                // Если имя изменилось, удаляем старый ключ, чтобы не плодить дубликаты
+                if (editTitleController.text != oldTitle) {
+                  _linksBox.delete(oldTitle);
+                }
                 
-                _titleController.clear();
-                _urlController.clear();
+                // Перезаписываем данные
+                _linksBox.put(editTitleController.text, {
+                  'url': editUrlController.text,
+                  'isPinned': linkData['isPinned'] ?? false,
+                });
+
                 Navigator.pop(context);
                 setState(() {}); 
               }
@@ -146,7 +225,6 @@ class _MainScreenState extends State<MainScreen> {
       return title.contains(query) || url.contains(query);
     }).toList();
 
-    // Сортировка по закрепам
     filteredKeys.sort((a, b) {
       final dataA = _linksBox.get(a) as Map;
       final dataB = _linksBox.get(b) as Map;
@@ -189,9 +267,7 @@ class _MainScreenState extends State<MainScreen> {
                         },
                       )
                     : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
             const SizedBox(height: 24),
@@ -216,15 +292,18 @@ class _MainScreenState extends State<MainScreen> {
                                 )
                               : null,
                           child: ListTile(
-                            leading: Icon(
-                              Icons.link, 
-                              color: isPinned ? Colors.blueAccent : Colors.grey
-                            ),
+                            // Здесь теперь динамически грузится иконка сайта!
+                            leading: _buildFavicon(url, isPinned),
                             title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                // Кнопка редактирования (карандаш)
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.orangeAccent),
+                                  onPressed: () => _showEditDialog(title, linkData),
+                                ),
                                 IconButton(
                                   icon: Icon(
                                     isPinned ? Icons.push_pin : Icons.push_pin_outlined,
