@@ -47,13 +47,8 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   final _linksBox = Hive.box('links_box');
-  
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _urlController = TextEditingController();
-
   String _searchQuery = '';
 
-  // Хелпер для получения домена из ссылки
   String _getDomain(String url) {
     try {
       var uri = Uri.parse(url);
@@ -66,7 +61,6 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // Виджет для загрузки иконки сайта (Favicon)
   Widget _buildFavicon(String url, bool isPinned) {
     final domain = _getDomain(url);
     if (domain.isEmpty) {
@@ -106,10 +100,10 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // Окно добавления новой ссылки
   void _showAddDialog() {
-    _titleController.clear();
-    _urlController.clear();
+    final addTitleController = TextEditingController();
+    final addUrlController = TextEditingController();
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -118,12 +112,12 @@ class _MainScreenState extends State<MainScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
-              controller: _titleController,
+              controller: addTitleController,
               decoration: const InputDecoration(labelText: 'Название', border: OutlineInputBorder()),
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: _urlController,
+              controller: addUrlController,
               decoration: const InputDecoration(labelText: 'Ссылка (URL)', border: OutlineInputBorder()),
             ),
           ],
@@ -132,9 +126,9 @@ class _MainScreenState extends State<MainScreen> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
           ElevatedButton(
             onPressed: () {
-              if (_titleController.text.isNotEmpty && _urlController.text.isNotEmpty) {
-                _linksBox.put(_titleController.text, {
-                  'url': _urlController.text,
+              if (addTitleController.text.isNotEmpty && addUrlController.text.isNotEmpty) {
+                _linksBox.put(addTitleController.text, {
+                  'url': addUrlController.text,
                   'isPinned': false,
                 });
                 Navigator.pop(context);
@@ -148,10 +142,9 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // Окно РЕДАКТИРОВАНИЯ существующей ссылки
   void _showEditDialog(String oldTitle, Map linkData) {
-    final TextEditingController editTitleController = TextEditingController(text: oldTitle);
-    final TextEditingController editUrlController = TextEditingController(text: linkData['url']);
+    final editTitleController = TextEditingController(text: oldTitle);
+    final editUrlController = TextEditingController(text: linkData['url']);
 
     showDialog(
       context: context,
@@ -176,12 +169,10 @@ class _MainScreenState extends State<MainScreen> {
           ElevatedButton(
             onPressed: () {
               if (editTitleController.text.isNotEmpty && editUrlController.text.isNotEmpty) {
-                // Если имя изменилось, удаляем старый ключ, чтобы не плодить дубликаты
                 if (editTitleController.text != oldTitle) {
                   _linksBox.delete(oldTitle);
                 }
                 
-                // Перезаписываем данные
                 _linksBox.put(editTitleController.text, {
                   'url': editUrlController.text,
                   'isPinned': linkData['isPinned'] ?? false,
@@ -247,7 +238,6 @@ class _MainScreenState extends State<MainScreen> {
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-            
             TextField(
               onChanged: (value) {
                 setState(() {
@@ -271,7 +261,6 @@ class _MainScreenState extends State<MainScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            
             Expanded(
               child: filteredKeys.isEmpty
                   ? const Center(child: Text('Ничего не найдено или список пуст'))
@@ -292,14 +281,12 @@ class _MainScreenState extends State<MainScreen> {
                                 )
                               : null,
                           child: ListTile(
-                            // Здесь теперь динамически грузится иконка сайта!
                             leading: _buildFavicon(url, isPinned),
                             title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Кнопка редактирования (карандаш)
                                 IconButton(
                                   icon: const Icon(Icons.edit, color: Colors.orangeAccent),
                                   onPressed: () => _showEditDialog(title, linkData),
